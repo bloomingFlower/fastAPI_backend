@@ -1,0 +1,15 @@
+# Test the root endpoint
+GET http://127.0.0.1:8000/
+Accept: application/json
+
+###
+
+# Test the file list endpoint
+GET http://127.0.0.1:8000/files
+Accept: application/json
+
+###
+
+# Test the analysis history endpoint
+GET http://127.0.0.1:8000/history
+Accept: application/json

@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Endpoint v1 Test Page</title>
+    <style>
+        .section {
+            margin: 20px 0;
+            padding: 20px;
+            background-color: #f8f8f8;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        .section h2 {
+            margin-top: 0;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+        .section p, .section button {
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+<h1>Endpoint v1 Test Page</h1>
+
+<div class="section">
+    <h2>Root Endpoint</h2>
+    <button onclick="testEndpoint('http://127.0.0.1:8000/', 'GET', 'rootResult')">Test Root Endpoint</button>
+    <div id="rootResult"></div>
+</div>
+
+<div class="section">
+    <h2>File List & Request Analysis Endpoint(Pagination unit: 3)</h2>
+    <div id="error"></div>
+    <label for="fileListPage">Page Number:</label>
+    <input type="number" id="fileListPage" min="1" value="1">
+    <label for="fileListSearch">Search:</label>
+    <input type="text" id="fileListSearch" placeholder="Search by filename">
+    <button onclick="getFileList(document.getElementById('fileListPage').value, document.getElementById('fileListSearch').value)">Test File List Endpoint</button>
+    <div id="fileListResult"></div>
+</div>
+
+<div class="section">
+    <h2>Analysis History Endpoint(Pagination unit: 3)</h2>
+    <label for="historyPage">Page Number:</label>
+    <input type="number" id="historyPage" min="1" value="1">
+    <button onclick="getHistoryList(document.getElementById('historyPage').value)">Test Analysis History Endpoint</button>
+    <div id="historyResult"></div>
+</div>
+
+<div class="section">
+    <h2>Recent Grid Results</h2>
+    <div id="gridResults"></div>
+</div>
+
+<div class="section">
+    <h2>Upload Multiple Files</h2>
+    <form id="uploadForm" action="http://127.0.0.1:8000/upload_files" method="post" enctype="multipart/form-data">
+        <label for="files">Upload:</label>
+        <input type="file" id="files" name="files" multiple>
+        <input type="submit" value="Upload">
+    </form>
+</div>
+
+<div class="section">
+    <h2>Upload Results</h2>
+    <div id="uploadResults"></div>
+</div>
+
+<script>
+    window.onload = function() {
+        testEndpoint('http://127.0.0.1:8000/', 'GET', 'rootResult');
+    }
+
+    document.getElementById('uploadForm').addEventListener('submit', function(event) {
+        event.preventDefault();
+        uploadFiles();
+    });
+
+    function getFileList(page, filename) {
+        let limit = 3;
+        let skip = (page - 1) * limit;
+        testEndpoint('http://127.0.0.1:8000/files', 'GET', 'fileListResult', skip, limit, filename);
+    }
+
+    function getHistoryList(page) {
+        let limit = 3;
+        let skip = (page - 1) * limit;
+        testEndpoint('http://127.0.0.1:8000/history', 'GET', 'historyResult', skip, limit);
+    }
+
+    function testEndpoint(url, method, resultElementId, skip, limit, filename) {
+        url += '?skip=' + skip + '&limit=' + limit;
+        if (filename) {
+            url += '&filename=' + encodeURIComponent(filename);
+        }
+        fetch(url, { method: method })
+            .then(response => response.json())
+            .then(data => {
+                if (resultElementId === 'fileListResult') {
+                    let fileListElement = document.getElementById(resultElementId);
+                    fileListElement.innerHTML = '';
+
+                    data.forEach(file => {
+                        let fileElement = document.createElement('p');
+                        fileElement.textContent = file.id + ": " + file.filename + " | " + file.status;
+
+                        let downloadButton = document.createElement('button');
+                        downloadButton.textContent = 'Download';
+                        downloadButton.onclick = function() {
+                            downloadFile(file.id);
+                        };
+
+                        let analyzeButton = document.createElement('button');
+                        analyzeButton.textContent = 'Analyze';
+                        analyzeButton.onclick = function() {
+                            analyzeFile(file.id);
+                        };
+
+                        let deleteButton = document.createElement('button');
+                        deleteButton.textContent = 'Delete';
+                        deleteButton.onclick = function() {
+                            deleteFile(file.id);
+                        };
+
+                        fileListElement.appendChild(fileElement);
+                        fileListElement.appendChild(downloadButton);
+                        fileListElement.appendChild(analyzeButton);
+                        fileListElement.appendChild(deleteButton);
+                    });
+
+                } else if (resultElementId === 'historyResult') {
+                    let historyListElement = document.getElementById(resultElementId);
+                    historyListElement.innerHTML = '';
+
+                    data.forEach(history => {
+                        let historyElement = document.createElement('p');
+                        historyElement.textContent = 'ID: ' + history.id + ', Decision: ' + history.decision + ', Score: ' + history.score;
+
+                        let deleteButton = document.createElement('button');
+                        deleteButton.textContent = 'Delete';
+                        deleteButton.onclick = function() {
+                            deleteHistory(history.id);
+                        };
+
+
+                        let gridResultsButton = document.createElement('button');
+                        gridResultsButton.textContent = 'View Grid Results';
+                        gridResultsButton.onclick = function() {
+                            getGridResults(history.id);
+                        };
+
+                        historyListElement.appendChild(historyElement);
+                        historyListElement.appendChild(deleteButton);
+                        historyListElement.appendChild(gridResultsButton);
+                    });
+
+
+                } else {
+                    document.getElementById(resultElementId).innerText = JSON.stringify(data, null, 2);
+                }
+            })
+            .catch(error => {
+                document.getElementById(resultElementId).innerText = 'Error: ' + error;
+            });
+    }
+
+    function uploadFiles() {
+        let url = 'http://127.0.0.1:8000/upload_files';
+        let files = document.getElementById('files').files;
+        let formData = new FormData();
+
+        for (const element of files) {
+            let file = element;
+            formData.append('files', file, file.name);
+        }
+
+        fetch(url, { method: 'POST', body: formData })
+            .then(response => response.json())
+            .then(data => {
+                let uploadResultsElement = document.getElementById('uploadResults');
+                uploadResultsElement.innerHTML = '';
+
+                data.forEach(file => {
+                    let fileElement = document.createElement('p');
+                    fileElement.textContent = 'Uploaded: ' + file.filename;
+                    uploadResultsElement.appendChild(fileElement);
+                });
+                document.getElementById('uploadForm').reset();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+    }
+
+    function analyzeFile(file_id) {
+        document.getElementById('error').innerText = '';
+
+        let url = 'http://127.0.0.1:8000/analyze/' + file_id;
+        fetch(url, { method: 'POST' })
+            .then(response => {
+                if (!response.ok) {
+                    return response.text().then(error => {
+                        throw new Error(error);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                document.getElementById('error').innerText = 'Success: '+ data.file_id + ' analysis requested(Decision: '+ data.decision + ', Score: ' + data.score + ')';
+                getFileList(document.getElementById('fileListPage').value, document.getElementById('fileListSearch').value);
+            })
+            .catch(error => {
+                getFileList(document.getElementById('fileListPage').value, document.getElementById('fileListSearch').value);
+                document.getElementById('error').innerText = 'Error: ' + error.message;
+            });
+    }
+
+    function downloadFile(fileId) {
+        let url = 'http://127.0.0.1:8000/download/' + fileId;
+        window.open(url, '_blank');
+    }
+
+    function deleteFile(fileId) {
+        var url = 'http://127.0.0.1:8000/files/' + fileId;
+        fetch(url, { method: 'DELETE' })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Delete failed');
+                }
+                alert('File deleted successfully');
+                getHistoryList(document.getElementById('historyPage').value);
+                document.getElementById('gridResults').innerHTML = '';
+                document.getElementById('error').innerText = '';
+                getFileList(document.getElementById('fileListPage').value, document.getElementById('fileListSearch').value);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+    }
+
+    function deleteHistory(historyId) {
+        let url = 'http://127.0.0.1:8000/history/' + historyId;
+        fetch(url, { method: 'DELETE' })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Delete failed');
+                }
+                alert('History deleted successfully');
+                getHistoryList(document.getElementById('historyPage').value);
+                document.getElementById('gridResults').innerHTML = '';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+    }
+
+    function getGridResults(analysis_id) {
+        let url = 'http://127.0.0.1:8000/grid_results/' + analysis_id;
+        fetch(url, { method: 'GET' })
+            .then(response => response.json())
+            .then(data => {
+                let gridResultsElement = document.getElementById('gridResults');
+                gridResultsElement.innerHTML = 'Analysis ID: ' + analysis_id + '<br>' + JSON.stringify(data, null, 2);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+    }
+</script>
+
+</body>
+</html>
